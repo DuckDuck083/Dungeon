@@ -1,0 +1,1446 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dungeon Courier</title>
+  <style>
+    :root {
+      --bg: #111318;
+      --panel: #20242c;
+      --panel-2: #2b313b;
+      --ink: #f4f1e7;
+      --muted: #b9bdc7;
+      --gold: #f5c84c;
+      --red: #e05252;
+      --green: #57c56b;
+      --blue: #65a8ff;
+      --stone: #3f4550;
+      --floor: #707779;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background: radial-gradient(circle at 18% 14%, #27313a 0 18%, transparent 36%), var(--bg);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 310px;
+      height: 100vh;
+    }
+
+    .stage {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-width: 0;
+      padding: 18px;
+    }
+
+    canvas {
+      width: min(100%, calc(100vh - 36px));
+      max-width: 980px;
+      aspect-ratio: 1;
+      border: 2px solid #454c57;
+      background: #0f1115;
+      box-shadow: 0 20px 70px rgba(0, 0, 0, .45);
+      image-rendering: pixelated;
+    }
+
+    .sidebar {
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 14px;
+      height: 100vh;
+      padding: 16px;
+      background: rgba(24, 27, 33, .96);
+      border-left: 1px solid #343a44;
+      overflow-y: auto;
+    }
+
+    h1, h2, p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 22px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      font-size: 14px;
+      color: var(--muted);
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .panel {
+      padding: 12px;
+      background: var(--panel);
+      border: 1px solid #343a44;
+      border-radius: 8px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .stat {
+      min-height: 58px;
+      padding: 9px;
+      background: var(--panel-2);
+      border-radius: 7px;
+    }
+
+    .label {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .value {
+      display: block;
+      margin-top: 5px;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .bar {
+      height: 9px;
+      margin-top: 8px;
+      overflow: hidden;
+      background: #12151a;
+      border-radius: 999px;
+    }
+
+    .bar span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--green);
+    }
+
+    .weapon-list, .task-list, .controls, .log {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    button {
+      width: 100%;
+      min-height: 40px;
+      color: var(--ink);
+      background: #323945;
+      border: 1px solid #4a5360;
+      border-radius: 7px;
+      font: inherit;
+      font-weight: 750;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #3b4553;
+    }
+
+    button:disabled {
+      cursor: default;
+      color: #8e95a3;
+      background: #252932;
+      border-color: #343a44;
+    }
+
+    .pill {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 34px;
+      padding: 7px 9px;
+      color: var(--muted);
+      background: #191d24;
+      border: 1px solid #333944;
+      border-radius: 7px;
+      font-size: 13px;
+    }
+
+    .pill strong {
+      color: var(--ink);
+    }
+
+    .kbd {
+      min-width: 28px;
+      padding: 3px 6px;
+      color: #101217;
+      background: var(--gold);
+      border-radius: 5px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .message {
+      position: absolute;
+      left: 50%;
+      top: 24px;
+      width: min(520px, calc(100% - 40px));
+      padding: 12px 14px;
+      color: var(--ink);
+      background: rgba(20, 23, 29, .92);
+      border: 1px solid #515b68;
+      border-radius: 8px;
+      transform: translateX(-50%);
+      text-align: center;
+      font-weight: 750;
+      pointer-events: none;
+    }
+
+    .modal {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(8, 9, 12, .72);
+    }
+
+    .modal[hidden] {
+      display: none;
+    }
+
+    .modal-box {
+      width: min(480px, 100%);
+      padding: 18px;
+      background: #20242c;
+      border: 1px solid #4c5562;
+      border-radius: 8px;
+      box-shadow: 0 20px 80px rgba(0, 0, 0, .55);
+    }
+
+    .modal-box h2 {
+      color: var(--ink);
+      font-size: 24px;
+      text-transform: none;
+    }
+
+    .modal-box p {
+      margin-top: 10px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    @media (max-width: 860px) {
+      body {
+        overflow: auto;
+      }
+
+      .app {
+        grid-template-columns: 1fr;
+        height: auto;
+        min-height: 100vh;
+      }
+
+      .stage {
+        height: min(100vh, 720px);
+        padding: 10px;
+      }
+
+      canvas {
+        width: min(100%, calc(100vh - 20px));
+      }
+
+      .sidebar {
+        height: auto;
+        border-left: 0;
+        border-top: 1px solid #343a44;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="stage">
+      <canvas id="game" width="960" height="960" aria-label="Dungeon Courier game"></canvas>
+      <div class="message" id="message">Deliver the package to the boss. Survive, loot, upgrade.</div>
+      <div class="modal" id="modal">
+        <div class="modal-box">
+          <h2 id="modalTitle">Dungeon Courier</h2>
+          <p id="modalText">Start with a sword, clear monster rooms, loot chests for coins, buy guns, and deliver the package to the boss room.</p>
+          <button id="modalButton">Start Run</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="sidebar">
+      <div>
+        <h1>Dungeon Courier</h1>
+      </div>
+
+      <section class="panel stats">
+        <div class="stat">
+          <span class="label">Health</span>
+          <span class="value" id="healthText">100</span>
+          <div class="bar"><span id="healthBar"></span></div>
+        </div>
+        <div class="stat">
+          <span class="label">Coins</span>
+          <span class="value" id="coinsText">0</span>
+        </div>
+        <div class="stat">
+          <span class="label">Floor-Room</span>
+          <span class="value" id="levelText">1</span>
+        </div>
+        <div class="stat">
+          <span class="label">Weapon</span>
+          <span class="value" id="weaponText">Sword</span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Blacksmith</h2>
+        <div class="weapon-list" id="shop"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Tasks</h2>
+        <div class="task-list" id="tasks"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Controls</h2>
+        <div class="controls">
+          <div class="pill"><strong>Move</strong><span class="kbd">WASD</span></div>
+          <div class="pill"><strong>Aim</strong><span class="kbd">Mouse</span></div>
+          <div class="pill"><strong>Shoot</strong><span class="kbd">Click</span></div>
+          <div class="pill"><strong>Open chest</strong><span class="kbd">E</span></div>
+          <div class="pill"><strong>Dash</strong><span class="kbd">Shift</span></div>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <script>
+    const canvas = document.querySelector("#game");
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    const ui = {
+      healthText: document.querySelector("#healthText"),
+      healthBar: document.querySelector("#healthBar"),
+      coinsText: document.querySelector("#coinsText"),
+      levelText: document.querySelector("#levelText"),
+      weaponText: document.querySelector("#weaponText"),
+      shop: document.querySelector("#shop"),
+      tasks: document.querySelector("#tasks"),
+      message: document.querySelector("#message"),
+      modal: document.querySelector("#modal"),
+      modalTitle: document.querySelector("#modalTitle"),
+      modalText: document.querySelector("#modalText"),
+      modalButton: document.querySelector("#modalButton")
+    };
+
+    const TILE = 48;
+    const GRID = 20;
+    const keys = new Set();
+    const walls = new Set();
+    const bullets = [];
+    const slashes = [];
+    const particles = [];
+    const enemies = [];
+    const chests = [];
+    const spawners = [];
+    const guards = [];
+    const torches = [];
+    let pointer = { x: 480, y: 480 };
+    let lastTime = 0;
+    let firing = false;
+    let gameState = "intro";
+    let messageTimer = 0;
+
+    const weapons = [
+      { name: "Sword", cost: 0, damage: 34, fireRate: 360, melee: true, range: 64, arc: 1.35, color: "#fff7cc" },
+      { name: "Twin Daggers", cost: 85, damage: 20, fireRate: 170, melee: true, range: 52, arc: 1.05, color: "#a8ffe2", dash: true },
+      { name: "Greatsword", cost: 145, damage: 64, fireRate: 680, melee: true, range: 84, arc: 1.75, color: "#ffd66b", knockback: 26 },
+      { name: "Pistol", cost: 120, damage: 18, fireRate: 270, speed: 600, spread: 0, bullets: 1, color: "#f5c84c" },
+      { name: "Frost Shotgun", cost: 240, damage: 14, fireRate: 560, speed: 500, spread: .42, bullets: 6, slow: 1.6, color: "#8bd8ff" },
+      { name: "Lightning Staff", cost: 360, damage: 24, fireRate: 410, speed: 690, spread: .02, bullets: 1, chain: 3, pierce: 1, color: "#d7b7ff" },
+      { name: "Rocket Launcher", cost: 560, damage: 54, fireRate: 780, speed: 430, spread: .015, bullets: 1, explosive: 86, color: "#ff9b54", r: 8 }
+    ];
+
+    const player = {
+      x: 78,
+      y: 78,
+      r: 15,
+      hp: 100,
+      maxHp: 100,
+      coins: 40,
+      level: 1,
+      room: 0,
+      roomsPerLevel: 6,
+      weapon: 0,
+      ownedWeapons: [0],
+      lastShot: 0,
+      dash: 0,
+      roomStartHp: 100,
+      roomStartTime: 0,
+      clearStreak: 0,
+      roomsCleared: 0,
+      package: true,
+      kills: 0,
+      opened: 0,
+      spawners: 0,
+      deliveries: 0
+    };
+
+    const boss = { x: 870, y: 870, r: 28, delivered: false };
+    const palette = {
+      outline: "#15171b",
+      floorA: "#6e756f",
+      floorB: "#626a65",
+      floorLight: "#899189",
+      floorDark: "#4d554f",
+      moss: "#4f7850",
+      wallTop: "#565f68",
+      wallFace: "#333941",
+      wallEdge: "#20252c",
+      torch: "#f69f38",
+      torchHot: "#ffd66b",
+      void: "rgba(4, 5, 8, .44)"
+    };
+
+    let map = [];
+
+    function resetLevel(nextLevel = 1) {
+      player.level = nextLevel;
+      player.room = 0;
+      player.roomsPerLevel = 5 + Math.min(3, Math.floor(nextLevel / 2));
+      player.x = 78;
+      player.y = 78;
+      player.hp = Math.min(player.maxHp, player.hp + 25);
+      player.package = true;
+      player.kills = 0;
+      player.opened = 0;
+      player.spawners = 0;
+      boss.delivered = false;
+      enterRoom(0, "start");
+      showMessage(`Level ${player.level}: deliver the package through ${player.roomsPerLevel} rooms.`);
+    }
+
+    function enterRoom(roomIndex, from) {
+      player.room = roomIndex;
+      const finalRoom = isFinalRoom();
+      map = makeRoomMap(roomIndex, finalRoom);
+      bullets.length = 0;
+      slashes.length = 0;
+      enemies.length = 0;
+      chests.length = 0;
+      spawners.length = 0;
+      guards.length = 0;
+      torches.length = 0;
+      walls.clear();
+
+      for (let y = 0; y < GRID; y++) {
+        for (let x = 0; x < GRID; x++) {
+          if (map[y][x] === "#") walls.add(`${x},${y}`);
+        }
+      }
+
+      if (from === "right") player.x = 72;
+      else if (from === "left") player.x = 888;
+      else player.x = 78;
+      player.y = 480;
+      if (from === "start") player.y = 78;
+      player.roomStartHp = player.hp;
+      player.roomStartTime = performance.now();
+
+      placeTorches(finalRoom);
+      placeLevelObjects();
+      showMessage(finalRoom ? "Boss room: deliver the package." : `Room ${player.room + 1}: clear the room and loot fast.`);
+      updateUi();
+    }
+
+    function makeRoomMap(roomIndex, finalRoom) {
+      const rows = [];
+      for (let y = 0; y < GRID; y++) {
+        let row = "";
+        for (let x = 0; x < GRID; x++) {
+          const border = x === 0 || y === 0 || x === GRID - 1 || y === GRID - 1;
+          row += border ? "#" : ".";
+        }
+        rows.push(row);
+      }
+      if (roomIndex > 0) openDoor(rows, 0, 10);
+      if (!finalRoom) openDoor(rows, GRID - 1, 10);
+
+      const pattern = roomIndex % 7;
+      const blocks = [];
+      if (pattern === 0) blocks.push([5, 4, 2, 5], [8, 5, 4, 2], [14, 4, 2, 6], [4, 13, 5, 2], [12, 12, 3, 4]);
+      if (pattern === 1) blocks.push([4, 3, 2, 11], [14, 4, 2, 11], [7, 8, 6, 2], [8, 14, 4, 2], [10, 4, 2, 2]);
+      if (pattern === 2) blocks.push([5, 5, 4, 2], [12, 5, 4, 2], [5, 13, 4, 2], [12, 13, 4, 2], [9, 8, 2, 5]);
+      if (pattern === 3) blocks.push([3, 6, 6, 2], [12, 6, 5, 2], [6, 11, 2, 5], [12, 11, 2, 5], [8, 15, 5, 2]);
+      if (pattern === 4) blocks.push([8, 3, 2, 6], [11, 3, 2, 6], [8, 12, 2, 5], [11, 12, 2, 5], [4, 9, 4, 2], [14, 9, 3, 2]);
+      if (pattern === 5) blocks.push([3, 4, 5, 2], [12, 4, 5, 2], [5, 8, 3, 2], [12, 8, 3, 2], [3, 14, 5, 2], [12, 14, 5, 2], [9, 10, 2, 3]);
+      if (pattern === 6) blocks.push([6, 3, 2, 4], [12, 3, 2, 4], [4, 8, 5, 2], [11, 8, 5, 2], [6, 13, 2, 4], [12, 13, 2, 4]);
+      if (finalRoom) blocks.push([3, 3, 2, 5], [15, 3, 2, 5], [3, 13, 2, 4], [15, 13, 2, 4], [8, 4, 4, 2], [8, 15, 4, 2]);
+
+      for (const [x, y, w, h] of blocks) {
+        for (let by = y; by < y + h; by++) {
+          for (let bx = x; bx < x + w; bx++) setTile(rows, bx, by, "#");
+        }
+      }
+      addRubble(rows, roomIndex, finalRoom);
+      clearSafetyLanes(rows, roomIndex, finalRoom);
+      return rows;
+    }
+
+    function addRubble(rows, roomIndex, finalRoom) {
+      const count = 8 + Math.min(10, player.level + roomIndex);
+      for (let i = 0; i < count; i++) {
+        const x = 2 + (hash(roomIndex * 11 + i, player.level + i) % 16);
+        const y = 2 + (hash(roomIndex * 17 + i, player.level * 3 + i) % 16);
+        const protectedLane = y >= 8 && y <= 12 && (x < 5 || x > 14);
+        const bossZone = finalRoom && x > 15 && y >= 8 && y <= 12;
+        if (!protectedLane && !bossZone && rows[y][x] === "." && hash(x, y) % 3 !== 0) setTile(rows, x, y, "#");
+      }
+    }
+
+    function clearSafetyLanes(rows, roomIndex, finalRoom) {
+      for (let x = 1; x < GRID - 1; x++) {
+        if (x < 4 || x > 15 || x % 4 === roomIndex % 4) setTile(rows, x, 10, ".");
+      }
+      for (let y = 7; y <= 13; y++) {
+        setTile(rows, 1, y, ".");
+        setTile(rows, 2, y, ".");
+        if (!finalRoom) {
+          setTile(rows, 17, y, ".");
+          setTile(rows, 18, y, ".");
+        }
+      }
+      if (finalRoom) {
+        for (let y = 8; y <= 12; y++) {
+          for (let x = 15; x <= 18; x++) setTile(rows, x, y, ".");
+        }
+      }
+    }
+
+    function placeTorches(finalRoom) {
+      const candidates = finalRoom
+        ? [[2, 5], [2, 15], [10, 3], [10, 17], [17, 6], [17, 14]]
+        : [[2, 5], [2, 15], [7, 3], [12, 16], [17, 5], [17, 15]];
+      for (const [x, y] of candidates) {
+        if (!walls.has(`${x},${y}`)) torches.push({ x, y });
+      }
+    }
+
+    function openDoor(rows, x, y) {
+      setTile(rows, x, y - 1, ".");
+      setTile(rows, x, y, ".");
+      setTile(rows, x, y + 1, ".");
+    }
+
+    function setTile(rows, x, y, tile) {
+      rows[y] = rows[y].slice(0, x) + tile + rows[y].slice(x + 1);
+    }
+
+    function placeLevelObjects() {
+      const depth = player.level + player.room;
+      const finalRoom = isFinalRoom();
+      const monsterCount = finalRoom ? 6 + depth * 2 : 3 + depth * 2;
+      const guardCount = finalRoom ? 2 + Math.floor(depth / 2) : Math.floor(depth / 2);
+      const spawnerCount = finalRoom ? 1 + Math.floor(player.level / 2) : (player.room > 1 ? 1 : 0);
+      const chestCount = finalRoom ? 1 : 1 + (player.room % 2);
+
+      for (let i = 0; i < monsterCount; i++) {
+        const p = randomOpenTile(5);
+        enemies.push(makeEnemy(p.x, p.y, "monster"));
+      }
+      for (let i = 0; i < guardCount; i++) {
+        const p = randomOpenTile(6);
+        guards.push(makeEnemy(p.x, p.y, "guard"));
+      }
+      for (let i = 0; i < spawnerCount; i++) {
+        const p = randomOpenTile(7);
+        const maxHp = 70 + depth * 24;
+        spawners.push({ x: p.x, y: p.y, r: 18, hp: maxHp, maxHp, timer: 1.5 + Math.random() });
+      }
+      for (let i = 0; i < chestCount; i++) {
+        const p = randomOpenTile(4);
+        chests.push({ x: p.x, y: p.y, r: 16, opened: false, coins: 18 + depth * 8 + Math.floor(Math.random() * 18) });
+      }
+      if (finalRoom) {
+        boss.x = 860;
+        boss.y = 480;
+      }
+    }
+
+    function makeEnemy(x, y, type) {
+      const hard = player.level + player.room - 1;
+      const isGuard = type === "guard";
+      return {
+        x,
+        y,
+        r: isGuard ? 17 : 14,
+        hp: isGuard ? 55 + hard * 18 : 34 + hard * 12,
+        maxHp: isGuard ? 55 + hard * 18 : 34 + hard * 12,
+        speed: isGuard ? 80 + hard * 5 : 98 + hard * 7,
+        damage: isGuard ? 15 + hard * 2 : 10 + hard * 2,
+        type,
+        hitTimer: 0,
+        attackTimer: 0
+      };
+    }
+
+    function randomOpenTile(minDistance) {
+      let x = 1;
+      let y = 1;
+      for (let tries = 0; tries < 300; tries++) {
+        x = 1 + Math.floor(Math.random() * (GRID - 2));
+        y = 1 + Math.floor(Math.random() * (GRID - 2));
+        const tooClose = Math.hypot(x - 1, y - 1) < minDistance;
+        const tooCloseToBoss = isFinalRoom() && Math.hypot(x - 18, y - 10) < 4;
+        const doorLane = (x < 3 || x > 16) && y >= 8 && y <= 12;
+        if (!walls.has(`${x},${y}`) && !tooClose && !tooCloseToBoss && !doorLane) break;
+      }
+      return { x: x * TILE + TILE / 2, y: y * TILE + TILE / 2 };
+    }
+
+    function isFinalRoom() {
+      return player.room === player.roomsPerLevel - 1;
+    }
+
+    function roomCleared() {
+      return enemies.length === 0 && guards.length === 0 && spawners.length === 0;
+    }
+
+    function update(dt, time) {
+      if (gameState !== "play") return;
+      messageTimer -= dt;
+      if (messageTimer <= 0) ui.message.style.opacity = 0;
+      movePlayer(dt);
+      updateBullets(dt);
+      updateSlashes(dt);
+      updateEnemies(dt);
+      updateSpawners(dt);
+      updateParticles(dt);
+      checkDoorTransition();
+      checkDelivery();
+      if (firing) shoot(time);
+      updateUi();
+    }
+
+    function movePlayer(dt) {
+      let dx = 0;
+      let dy = 0;
+      if (keys.has("w")) dy--;
+      if (keys.has("s")) dy++;
+      if (keys.has("a")) dx--;
+      if (keys.has("d")) dx++;
+      const len = Math.hypot(dx, dy) || 1;
+      const dashing = keys.has("shift") && player.dash <= 0 && (dx || dy);
+      const speed = dashing ? 420 : 200;
+      if (dashing) {
+        player.dash = .9;
+        burst(player.x, player.y, "#65a8ff", 18);
+      }
+      player.dash -= dt;
+      tryMove(player, dx / len * speed * dt, dy / len * speed * dt);
+    }
+
+    function tryMove(entity, dx, dy) {
+      const nx = entity.x + dx;
+      if (!hitsWall(nx, entity.y, entity.r)) entity.x = nx;
+      const ny = entity.y + dy;
+      if (!hitsWall(entity.x, ny, entity.r)) entity.y = ny;
+    }
+
+    function hitsWall(x, y, r) {
+      const points = [
+        [x - r, y - r], [x + r, y - r], [x - r, y + r], [x + r, y + r]
+      ];
+      return points.some(([px, py]) => walls.has(`${Math.floor(px / TILE)},${Math.floor(py / TILE)}`));
+    }
+
+    function shoot(time) {
+      const weapon = weapons[player.weapon];
+      if (time - player.lastShot < weapon.fireRate) return;
+      player.lastShot = time;
+      const baseAngle = Math.atan2(pointer.y - player.y, pointer.x - player.x);
+      if (weapon.melee) {
+        slashes.push({ x: player.x, y: player.y, angle: baseAngle, life: .14, maxLife: .14, range: weapon.range });
+        for (const enemy of enemies.concat(guards)) {
+          const dist = Math.hypot(enemy.x - player.x, enemy.y - player.y);
+          const angle = Math.atan2(enemy.y - player.y, enemy.x - player.x);
+          if (dist < weapon.range + enemy.r && angleDiff(baseAngle, angle) < weapon.arc / 2) {
+            damageEnemy(enemy, weapon.damage);
+            if (weapon.knockback) tryMove(enemy, Math.cos(baseAngle) * weapon.knockback, Math.sin(baseAngle) * weapon.knockback);
+          }
+        }
+        for (const spawner of [...spawners]) {
+          const dist = Math.hypot(spawner.x - player.x, spawner.y - player.y);
+          const angle = Math.atan2(spawner.y - player.y, spawner.x - player.x);
+          if (dist < weapon.range + spawner.r && angleDiff(baseAngle, angle) < weapon.arc / 2) {
+            spawner.hp -= weapon.damage;
+            burst(spawner.x, spawner.y, "#b77dff", 8);
+            if (spawner.hp <= 0) {
+              spawners.splice(spawners.indexOf(spawner), 1);
+              player.spawners++;
+              player.coins += 35 + player.level * 8 + player.room * 4;
+              showMessage("Spawner destroyed. Coins earned.");
+            }
+          }
+        }
+        if (weapon.dash) {
+          tryMove(player, Math.cos(baseAngle) * 22, Math.sin(baseAngle) * 22);
+        }
+        burst(player.x + Math.cos(baseAngle) * 28, player.y + Math.sin(baseAngle) * 28, "#fff0a8", 8);
+        return;
+      }
+      for (let i = 0; i < weapon.bullets; i++) {
+        const spread = (Math.random() - .5) * weapon.spread;
+        const angle = baseAngle + spread + (weapon.bullets > 1 ? (i - (weapon.bullets - 1) / 2) * weapon.spread * .42 : 0);
+        bullets.push({
+          x: player.x + Math.cos(angle) * 20,
+          y: player.y + Math.sin(angle) * 20,
+          vx: Math.cos(angle) * weapon.speed,
+          vy: Math.sin(angle) * weapon.speed,
+          damage: weapon.damage,
+          weapon,
+          life: .9,
+          pierce: weapon.pierce || 0,
+          hit: new Set(),
+          r: weapon.r || 5
+        });
+      }
+      burst(player.x + Math.cos(baseAngle) * 24, player.y + Math.sin(baseAngle) * 24, "#f5c84c", 4);
+    }
+
+    function updateSlashes(dt) {
+      for (let i = slashes.length - 1; i >= 0; i--) {
+        slashes[i].life -= dt;
+        if (slashes[i].life <= 0) slashes.splice(i, 1);
+      }
+    }
+
+    function angleDiff(a, b) {
+      return Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+    }
+
+    function updateBullets(dt) {
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+        b.life -= dt;
+        const wallHit = hitsWall(b.x, b.y, b.r);
+        if (wallHit && b.weapon.explosive) explode(b.x, b.y, b.weapon.explosive, b.damage * .7);
+        let removed = b.life <= 0 || wallHit;
+        if (!removed) removed = bulletHits(b);
+        if (removed) bullets.splice(i, 1);
+      }
+    }
+
+    function bulletHits(b) {
+      const targets = enemies.concat(guards);
+      for (const enemy of targets) {
+        if (!b.hit.has(enemy) && Math.hypot(enemy.x - b.x, enemy.y - b.y) < enemy.r + b.r) {
+          b.hit.add(enemy);
+          hitTarget(enemy, b);
+          if (b.pierce > 0) {
+            b.pierce--;
+            return false;
+          }
+          return true;
+        }
+      }
+      for (const spawner of spawners) {
+        if (Math.hypot(spawner.x - b.x, spawner.y - b.y) < spawner.r + b.r) {
+          spawner.hp -= b.damage;
+          burst(spawner.x, spawner.y, "#b77dff", 6);
+          if (spawner.hp <= 0) {
+            spawners.splice(spawners.indexOf(spawner), 1);
+            player.spawners++;
+            player.coins += 35 + player.level * 8 + player.room * 4;
+            showMessage("Spawner destroyed. Coins earned.");
+          }
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function hitTarget(enemy, bullet) {
+      damageEnemy(enemy, bullet.damage);
+      if (bullet.weapon.slow) enemy.slowTimer = Math.max(enemy.slowTimer || 0, bullet.weapon.slow);
+      if (bullet.weapon.explosive) explode(bullet.x, bullet.y, bullet.weapon.explosive, bullet.damage * .7);
+      if (bullet.weapon.chain) chainLightning(enemy, bullet.weapon.chain, bullet.damage * .62);
+    }
+
+    function explode(x, y, radius, damage) {
+      burst(x, y, "#ff9b54", 26);
+      for (const enemy of enemies.concat(guards)) {
+        if (Math.hypot(enemy.x - x, enemy.y - y) < radius + enemy.r) damageEnemy(enemy, damage);
+      }
+      for (const spawner of [...spawners]) {
+        if (Math.hypot(spawner.x - x, spawner.y - y) < radius + spawner.r) {
+          spawner.hp -= damage;
+          if (spawner.hp <= 0) {
+            spawners.splice(spawners.indexOf(spawner), 1);
+            player.spawners++;
+            player.coins += 35 + player.level * 8 + player.room * 4;
+          }
+        }
+      }
+    }
+
+    function chainLightning(source, jumps, damage) {
+      let current = source;
+      const hit = new Set([source]);
+      for (let i = 0; i < jumps; i++) {
+        let next = null;
+        let best = 140;
+        for (const enemy of enemies.concat(guards)) {
+          const d = Math.hypot(enemy.x - current.x, enemy.y - current.y);
+          if (!hit.has(enemy) && d < best) {
+            best = d;
+            next = enemy;
+          }
+        }
+        if (!next) return;
+        particles.push({ x: current.x, y: current.y, vx: next.x - current.x, vy: next.y - current.y, color: "#d7b7ff", life: .09, bolt: true });
+        damageEnemy(next, damage);
+        hit.add(next);
+        current = next;
+      }
+    }
+
+    function damageEnemy(enemy, damage) {
+      enemy.hp -= damage;
+      enemy.hitTimer = .1;
+      burst(enemy.x, enemy.y, enemy.type === "guard" ? "#65a8ff" : "#e05252", 5);
+      if (enemy.hp <= 0) {
+        const list = enemy.type === "guard" ? guards : enemies;
+        list.splice(list.indexOf(enemy), 1);
+        player.kills++;
+        player.coins += enemy.type === "guard" ? 16 : 9;
+        if (Math.random() < .18) {
+          player.hp = Math.min(player.maxHp, player.hp + 10);
+          showMessage("Enemy dropped a med pack.");
+        }
+      }
+    }
+
+    function updateEnemies(dt) {
+      for (const enemy of enemies.concat(guards)) {
+        enemy.hitTimer -= dt;
+        enemy.attackTimer -= dt;
+        enemy.slowTimer = Math.max(0, (enemy.slowTimer || 0) - dt);
+        const dist = Math.hypot(player.x - enemy.x, player.y - enemy.y);
+        if (dist < 420 || enemy.type === "guard") {
+          const dx = (player.x - enemy.x) / (dist || 1);
+          const dy = (player.y - enemy.y) / (dist || 1);
+          const slow = enemy.slowTimer > 0 ? .45 : 1;
+          tryMove(enemy, dx * enemy.speed * slow * dt, dy * enemy.speed * slow * dt);
+        }
+        if (dist < enemy.r + player.r + 5 && enemy.attackTimer <= 0) {
+          hurtPlayer(enemy.damage);
+          enemy.attackTimer = enemy.type === "guard" ? .55 : .8;
+        }
+      }
+    }
+
+    function updateSpawners(dt) {
+      for (const spawner of spawners) {
+        spawner.timer -= dt;
+        if (spawner.timer <= 0 && enemies.length < 18 + player.level * 2) {
+          const angle = Math.random() * Math.PI * 2;
+          enemies.push(makeEnemy(spawner.x + Math.cos(angle) * 34, spawner.y + Math.sin(angle) * 34, "monster"));
+          spawner.timer = Math.max(.8, 3.3 - player.level * .25);
+          burst(spawner.x, spawner.y, "#b77dff", 10);
+        }
+      }
+    }
+
+    function updateParticles(dt) {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+    }
+
+    function hurtPlayer(amount) {
+      player.hp -= amount;
+      burst(player.x, player.y, "#ffffff", 10);
+      if (player.hp <= 0) {
+        gameState = "over";
+        player.hp = 0;
+        showModal("Run Lost", `You reached level ${player.level} with ${player.coins} coins. Buy smarter, clear spawners early, and keep moving.`, "Restart");
+      }
+    }
+
+    function checkDelivery() {
+      if (!isFinalRoom() || !player.package || boss.delivered) return;
+      if (Math.hypot(player.x - boss.x, player.y - boss.y) < player.r + boss.r + 10) {
+        boss.delivered = true;
+        player.package = false;
+        player.deliveries++;
+        const reward = 85 + player.level * 30 + player.kills * 3 + player.opened * 12;
+        player.coins += reward;
+        gameState = "levelClear";
+        showModal("Package Delivered", `The boss accepted the package. Reward: ${reward} coins. Level ${player.level + 1} will add more monsters, guards, and spawners.`, "Next Level");
+      }
+    }
+
+    function checkDoorTransition() {
+      if (player.x > canvas.width - 14 && !isFinalRoom()) {
+        if (!roomCleared()) {
+          player.x = canvas.width - 42;
+          showMessage("The room is sealed. Clear monsters and spawners first.");
+          return;
+        }
+        const reward = 18 + player.level * 8 + player.room * 5;
+        player.coins += reward;
+        enterRoom(player.room + 1, "right");
+      }
+      if (player.x < 14 && player.room > 0) {
+        enterRoom(player.room - 1, "left");
+      }
+    }
+
+    function openNearbyChest() {
+      if (gameState !== "play") return;
+      for (const chest of chests) {
+        if (!chest.opened && Math.hypot(player.x - chest.x, player.y - chest.y) < 54) {
+          chest.opened = true;
+          player.opened++;
+          player.coins += chest.coins;
+          if (Math.random() < .45) player.hp = Math.min(player.maxHp, player.hp + 15);
+          burst(chest.x, chest.y, "#f5c84c", 18);
+          showMessage(`Chest opened: ${chest.coins} coins.`);
+          return;
+        }
+      }
+    }
+
+    function burst(x, y, color, count) {
+      for (let i = 0; i < count; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const s = 40 + Math.random() * 120;
+        particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, color, life: .25 + Math.random() * .35 });
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawMap();
+      drawChests();
+      drawSpawners();
+      if (isFinalRoom()) drawBoss();
+      for (const enemy of enemies) drawEnemy(enemy);
+      for (const guard of guards) drawEnemy(guard);
+      drawPlayer();
+      drawSlashes();
+      drawBullets();
+      drawParticles();
+      drawDarkness();
+      drawMinimapHint();
+    }
+
+    function drawMap() {
+      for (let y = 0; y < GRID; y++) {
+        for (let x = 0; x < GRID; x++) {
+          const wall = walls.has(`${x},${y}`);
+          if (wall) drawWallTile(x, y);
+          else drawFloorTile(x, y);
+        }
+      }
+      for (const torch of torches) drawTorch(torch.x, torch.y);
+      drawDoorGlow();
+    }
+
+    function drawFloorTile(tx, ty) {
+      const x = tx * TILE;
+      const y = ty * TILE;
+      const seed = hash(tx, ty);
+      ctx.fillStyle = seed % 2 ? palette.floorA : palette.floorB;
+      ctx.fillRect(x, y, TILE, TILE);
+      ctx.fillStyle = "rgba(0,0,0,.12)";
+      ctx.fillRect(x, y + TILE - 5, TILE, 5);
+      ctx.fillStyle = "rgba(255,255,255,.08)";
+      ctx.fillRect(x + 1, y + 1, TILE - 2, 2);
+      ctx.fillStyle = palette.floorDark;
+      if (seed % 3 === 0) ctx.fillRect(x + 8, y + 13, 18, 3);
+      if (seed % 5 === 0) ctx.fillRect(x + 28, y + 32, 12, 3);
+      if (seed % 7 === 0) {
+        ctx.fillStyle = palette.moss;
+        ctx.fillRect(x + 3, y + 35, 15, 4);
+        ctx.fillRect(x + 5, y + 39, 7, 3);
+      }
+      ctx.fillStyle = palette.floorLight;
+      if (seed % 4 === 0) ctx.fillRect(x + 31, y + 10, 7, 2);
+      ctx.strokeStyle = "rgba(22,24,28,.24)";
+      ctx.strokeRect(x + .5, y + .5, TILE - 1, TILE - 1);
+    }
+
+    function drawWallTile(tx, ty) {
+      const x = tx * TILE;
+      const y = ty * TILE;
+      const openBelow = !walls.has(`${tx},${ty + 1}`);
+      const seed = hash(tx, ty);
+      ctx.fillStyle = palette.wallEdge;
+      ctx.fillRect(x, y, TILE, TILE);
+      ctx.fillStyle = palette.wallTop;
+      ctx.fillRect(x + 2, y + 2, TILE - 4, openBelow ? 25 : TILE - 4);
+      ctx.fillStyle = seed % 2 ? "#626c75" : "#4d5660";
+      ctx.fillRect(x + 7, y + 7, 14, 8);
+      ctx.fillRect(x + 26, y + 18, 15, 7);
+      ctx.fillStyle = "rgba(255,255,255,.08)";
+      ctx.fillRect(x + 3, y + 3, TILE - 6, 3);
+      if (openBelow) {
+        ctx.fillStyle = palette.wallFace;
+        ctx.fillRect(x + 2, y + 27, TILE - 4, 19);
+        ctx.fillStyle = "#272d35";
+        ctx.fillRect(x + 2, y + 42, TILE - 4, 4);
+        ctx.fillStyle = "#47505a";
+        ctx.fillRect(x + 8, y + 31, 12, 4);
+        ctx.fillRect(x + 29, y + 36, 10, 3);
+      }
+    }
+
+    function drawPlayer() {
+      const angle = Math.atan2(pointer.y - player.y, pointer.x - player.x);
+      drawShadow(player.x, player.y + 11, 17, 6);
+      pixelSprite(player.x, player.y, [
+        ["hair", -10, -20, 20, 8],
+        ["skin", -8, -15, 16, 12],
+        ["coat", -11, -3, 22, 19],
+        ["coatDark", -11, 10, 8, 9],
+        ["coatDark", 3, 10, 8, 9],
+        ["boot", -10, 18, 7, 6],
+        ["boot", 3, 18, 7, 6],
+        ["skin", -16, -2, 6, 12],
+        ["skin", 10, -2, 6, 12],
+        ["blue", -5, -2, 10, 10],
+        ["outline", -11, -21, 22, 3],
+        ["outline", -13, -3, 3, 22],
+        ["outline", 10, -3, 3, 22]
+      ], {
+        hair: "#594437",
+        skin: "#d5a66f",
+        coat: "#d04f3f",
+        coatDark: "#8e2f32",
+        boot: "#312923",
+        blue: "#5aa1d8",
+        outline: palette.outline
+      });
+      ctx.save();
+      ctx.translate(player.x, player.y);
+      ctx.rotate(angle);
+      if (weapons[player.weapon].melee) {
+        px(10, -3, 31, 6, palette.outline);
+        px(14, -2, 28, 3, "#d7dee7");
+        px(36, -1, 7, 2, "#fff7cc");
+        px(7, -6, 7, 12, "#8b5a2b");
+      } else {
+        px(12, -5, 25, 10, palette.outline);
+        px(15, -3, 21, 5, "#303640");
+        px(33, -2, 6, 4, "#cfd2d6");
+      }
+      ctx.restore();
+      if (player.package) {
+        px(player.x - 11, player.y - 34, 22, 16, palette.outline);
+        px(player.x - 9, player.y - 32, 18, 12, "#d59c3c");
+        px(player.x - 1, player.y - 32, 3, 12, "#7b5c18");
+        px(player.x - 9, player.y - 27, 18, 2, "#f2c66a");
+      }
+    }
+
+    function drawEnemy(enemy) {
+      drawShadow(enemy.x, enemy.y + 10, enemy.r + 2, 5);
+      if (enemy.type === "guard") {
+        const armor = enemy.hitTimer > 0 ? "#ffffff" : "#477fb6";
+        pixelSprite(enemy.x, enemy.y, [
+          ["outline", -13, -17, 26, 32],
+          ["helm", -10, -19, 20, 10],
+          ["face", -8, -10, 16, 8],
+          ["armor", -12, -2, 24, 19],
+          ["trim", -8, 3, 16, 4],
+          ["dark", -10, 15, 7, 8],
+          ["dark", 3, 15, 7, 8],
+          ["gold", -15, -1, 5, 13],
+          ["gold", 10, -1, 5, 13]
+        ], { outline: palette.outline, helm: "#aeb7c2", face: "#c89561", armor, trim: "#d7dee7", dark: "#24313f", gold: "#d7a443" });
+      } else {
+        const body = enemy.hitTimer > 0 ? "#ffffff" : "#a63b3b";
+        pixelSprite(enemy.x, enemy.y, [
+          ["outline", -15, -14, 30, 27],
+          ["body", -12, -12, 24, 24],
+          ["dark", -14, 4, 6, 12],
+          ["dark", 8, 4, 6, 12],
+          ["horn", -14, -19, 7, 9],
+          ["horn", 7, -19, 7, 9],
+          ["eye", -7, -4, 5, 4],
+          ["eye", 2, -4, 5, 4],
+          ["mouth", -5, 7, 10, 3]
+        ], { outline: palette.outline, body, dark: "#6f232b", horn: "#d6c6a1", eye: "#ffd66b", mouth: "#251111" });
+      }
+      drawHealth(enemy.x, enemy.y - enemy.r - 10, enemy.hp / enemy.maxHp, enemy.r * 2);
+    }
+
+    function drawSpawners() {
+      for (const spawner of spawners) {
+        drawShadow(spawner.x, spawner.y + 12, 23, 7);
+        const pulse = Math.sin(performance.now() / 180);
+        pixelSprite(spawner.x, spawner.y, [
+          ["outline", -21, -18, 42, 34],
+          ["stone", -18, -15, 36, 28],
+          ["dark", -13, -10, 26, 19],
+          ["glow", -8, -6, 16, 12],
+          ["hot", -4, -3, 8, 6],
+          ["rune", -18, 13, 36, 4]
+        ], { outline: palette.outline, stone: "#5c4b75", dark: "#2d213e", glow: pulse > 0 ? "#b77dff" : "#8f55d6", hot: "#ead9ff", rune: "#c58dff" });
+        drawHealth(spawner.x, spawner.y - 30, spawner.hp / spawner.maxHp, 42);
+      }
+    }
+
+    function drawChests() {
+      for (const chest of chests) {
+        drawShadow(chest.x, chest.y + 12, 20, 6);
+        const lid = chest.opened ? -9 : -14;
+        pixelSprite(chest.x, chest.y, [
+          ["outline", -20, lid - 2, 40, 30],
+          ["woodDark", -17, lid + 1, 34, 25],
+          ["wood", -15, lid + 4, 30, 19],
+          ["band", -2, lid + 1, 5, 25],
+          ["shine", -12, lid + 6, 10, 3],
+          ["lock", -5, lid + 14, 10, 8]
+        ], {
+          outline: palette.outline,
+          woodDark: chest.opened ? "#4d4030" : "#6d3d25",
+          wood: chest.opened ? "#6d593d" : "#a96331",
+          band: chest.opened ? "#2f2f2f" : "#d5a442",
+          shine: "#d88a43",
+          lock: chest.opened ? "#2a241d" : "#f5c84c"
+        });
+      }
+    }
+
+    function drawBoss() {
+      drawShadow(boss.x, boss.y + 18, 34, 8);
+      pixelSprite(boss.x, boss.y, [
+        ["outline", -28, -31, 56, 59],
+        ["cloak", -24, -24, 48, 50],
+        ["trim", -20, 14, 40, 8],
+        ["face", -15, -16, 30, 20],
+        ["eye", -12, -8, 6, 5],
+        ["eye", 6, -8, 6, 5],
+        ["crown", -18, -34, 36, 12],
+        ["gem", -4, -31, 8, 7]
+      ], {
+        outline: palette.outline,
+        cloak: boss.delivered ? "#3f7f54" : "#3b2f5e",
+        trim: "#d2a64b",
+        face: "#785c91",
+        eye: "#f5c84c",
+        crown: "#d7a443",
+        gem: "#65a8ff"
+      });
+      ctx.fillStyle = "#f4f1e7";
+      ctx.font = "700 13px system-ui";
+      ctx.textAlign = "center";
+      ctx.fillText("BOSS", boss.x, boss.y + 47);
+    }
+
+    function drawBullets() {
+      for (const b of bullets) {
+        px(b.x - 5, b.y - 3, 10, 6, "#7b4d17");
+        px(b.x - 3, b.y - 2, 8, 4, "#f5c84c");
+        px(b.x + 3, b.y - 1, 4, 2, "#fff0a8");
+      }
+    }
+
+    function drawSlashes() {
+      for (const slash of slashes) {
+        const t = slash.life / slash.maxLife;
+        ctx.save();
+        ctx.translate(slash.x, slash.y);
+        ctx.rotate(slash.angle);
+        ctx.globalAlpha = Math.max(.15, t);
+        ctx.fillStyle = "#fff7cc";
+        ctx.beginPath();
+        ctx.moveTo(12, -8);
+        ctx.lineTo(slash.range, -24);
+        ctx.lineTo(slash.range + 10, -8);
+        ctx.lineTo(22, 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = "#65a8ff";
+        ctx.fillRect(24, 9, slash.range - 15, 5);
+        ctx.restore();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    function drawParticles() {
+      for (const p of particles) {
+        if (p.bolt) {
+          ctx.globalAlpha = Math.max(0, p.life * 10);
+          ctx.strokeStyle = p.color;
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x + p.vx, p.y + p.vy);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+          continue;
+        }
+        ctx.globalAlpha = Math.max(0, p.life * 3);
+        circle(p.x, p.y, 3, p.color);
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    function drawMinimapHint() {
+      const dx = boss.x - player.x;
+      const dy = boss.y - player.y;
+      const a = Math.atan2(dy, dx);
+      ctx.save();
+      ctx.translate(canvas.width - 62, 54);
+      ctx.rotate(a);
+      ctx.fillStyle = isFinalRoom() ? "#57c56b" : "#f5c84c";
+      ctx.beginPath();
+      ctx.moveTo(24, 0);
+      ctx.lineTo(-12, -10);
+      ctx.lineTo(-5, 0);
+      ctx.lineTo(-12, 10);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawDarkness() {
+      ctx.save();
+      ctx.fillStyle = palette.void;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.globalCompositeOperation = "destination-out";
+      cutLight(player.x, player.y, weapons[player.weapon].melee ? 245 : 285, 1);
+      for (const torch of torches) {
+        cutLight(torch.x * TILE + TILE / 2, torch.y * TILE + TILE / 2, 145, .86);
+      }
+      if (!isFinalRoom()) cutLight(canvas.width - 28, TILE * 10 + TILE / 2, roomCleared() ? 150 : 92, .82);
+      if (player.room > 0) cutLight(28, TILE * 10 + TILE / 2, 120, .72);
+      if (isFinalRoom()) cutLight(boss.x, boss.y, 180, .82);
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = "rgba(0,0,0,.08)";
+      for (let y = 0; y < GRID; y++) {
+        for (let x = 0; x < GRID; x++) {
+          if (walls.has(`${x},${y}`)) ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+        }
+      }
+      ctx.restore();
+    }
+
+    function cutLight(x, y, radius, strength) {
+      const gradient = ctx.createRadialGradient(x, y, 12, x, y, radius);
+      gradient.addColorStop(0, `rgba(0,0,0,${strength})`);
+      gradient.addColorStop(.52, `rgba(0,0,0,${strength * .55})`);
+      gradient.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawDoorGlow() {
+      if (!isFinalRoom()) {
+        const open = roomCleared();
+        ctx.fillStyle = open ? "rgba(87,197,107,.22)" : "rgba(224,82,82,.22)";
+        ctx.fillRect(canvas.width - 14, TILE * 9, 14, TILE * 3);
+        px(canvas.width - 10, TILE * 10 - 8, 7, 64, open ? "#57c56b" : "#e05252");
+      }
+      if (player.room > 0) {
+        ctx.fillStyle = "rgba(101,168,255,.12)";
+        ctx.fillRect(0, TILE * 9, 14, TILE * 3);
+      }
+    }
+
+    function drawHealth(x, y, pct, width) {
+      ctx.fillStyle = "#12151a";
+      ctx.fillRect(x - width / 2, y, width, 5);
+      ctx.fillStyle = pct > .45 ? "#57c56b" : "#e05252";
+      ctx.fillRect(x - width / 2, y, width * Math.max(0, pct), 5);
+    }
+
+    function circle(x, y, r, color) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function px(x, y, w, h, color) {
+      ctx.fillStyle = color;
+      ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+    }
+
+    function pixelSprite(cx, cy, parts, colors) {
+      for (const [key, x, y, w, h] of parts) {
+        px(cx + x, cy + y, w, h, colors[key]);
+      }
+    }
+
+    function drawShadow(x, y, w, h) {
+      ctx.fillStyle = "rgba(0,0,0,.28)";
+      ctx.beginPath();
+      ctx.ellipse(x, y, w, h, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawTorch(tx, ty) {
+      if (walls.has(`${tx},${ty}`)) return;
+      const x = tx * TILE + TILE / 2;
+      const y = ty * TILE + TILE / 2;
+      const flicker = Math.sin(performance.now() / 110 + tx * 2) * 2;
+      ctx.fillStyle = "rgba(246,159,56,.18)";
+      ctx.beginPath();
+      ctx.arc(x, y, 76 + flicker * 4, 0, Math.PI * 2);
+      ctx.fill();
+      px(x - 8, y + 20, 16, 5, "rgba(0,0,0,.28)");
+      px(x - 5, y + 5, 10, 16, "#4a2a1e");
+      px(x - 8, y - 4 + flicker, 16, 12, palette.torch);
+      px(x - 4, y - 8 + flicker, 8, 13, palette.torchHot);
+    }
+
+    function hash(x, y) {
+      return Math.abs((x * 73856093) ^ (y * 19349663) ^ (player.level * 83492791));
+    }
+
+    function updateUi() {
+      ui.healthText.textContent = Math.ceil(player.hp);
+      ui.healthBar.style.width = `${Math.max(0, player.hp / player.maxHp * 100)}%`;
+      ui.coinsText.textContent = player.coins;
+      ui.levelText.textContent = `${player.level}-${player.room + 1}`;
+      ui.weaponText.textContent = weapons[player.weapon].name;
+      renderShop();
+      renderTasks();
+    }
+
+    function renderShop() {
+      ui.shop.innerHTML = "";
+      weapons.forEach((weapon, index) => {
+        const btn = document.createElement("button");
+        const owned = index <= player.weapon;
+        btn.textContent = owned ? `${weapon.name} owned` : `Buy ${weapon.name} - ${weapon.cost} coins`;
+        btn.disabled = owned || player.coins < weapon.cost || gameState === "intro";
+        btn.addEventListener("click", () => {
+          if (player.coins >= weapon.cost && index > player.weapon) {
+            player.coins -= weapon.cost;
+            player.weapon = index;
+            showMessage(`${weapon.name} equipped.`);
+            updateUi();
+          }
+        });
+        ui.shop.appendChild(btn);
+      });
+    }
+
+    function renderTasks() {
+      const taskData = [
+        [`Room ${player.room + 1}/${player.roomsPerLevel}`, roomCleared() ? "clear" : "sealed"],
+        [`Deliver package`, boss.delivered ? "done" : isFinalRoom() ? "boss room" : "ahead"],
+        [`Open chests ${player.opened}/2`, player.opened >= 2 ? "done" : "active"],
+        [`Destroy spawners ${player.spawners}/1`, player.spawners >= 1 ? "done" : "active"],
+        [`Defeat enemies ${player.kills}/8`, player.kills >= 8 ? "done" : "active"]
+      ];
+      ui.tasks.innerHTML = "";
+      taskData.forEach(([text, status]) => {
+        const row = document.createElement("div");
+        row.className = "pill";
+        row.innerHTML = `<strong>${text}</strong><span>${status}</span>`;
+        ui.tasks.appendChild(row);
+      });
+    }
+
+    function showMessage(text) {
+      ui.message.textContent = text;
+      ui.message.style.opacity = 1;
+      messageTimer = 3;
+    }
+
+    function showModal(title, text, button) {
+      ui.modalTitle.textContent = title;
+      ui.modalText.textContent = text;
+      ui.modalButton.textContent = button;
+      ui.modal.hidden = false;
+    }
+
+    function hideModal() {
+      ui.modal.hidden = true;
+    }
+
+    function loop(time) {
+      const dt = Math.min(.033, (time - lastTime) / 1000 || 0);
+      lastTime = time;
+      update(dt, time);
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    window.addEventListener("keydown", (event) => {
+      keys.add(event.key.toLowerCase());
+      if (event.key.toLowerCase() === "e") openNearbyChest();
+    });
+
+    window.addEventListener("keyup", (event) => keys.delete(event.key.toLowerCase()));
+
+    canvas.addEventListener("mousemove", (event) => {
+      const rect = canvas.getBoundingClientRect();
+      pointer = {
+        x: (event.clientX - rect.left) / rect.width * canvas.width,
+        y: (event.clientY - rect.top) / rect.height * canvas.height
+      };
+    });
+
+    canvas.addEventListener("mousedown", () => firing = true);
+    window.addEventListener("mouseup", () => firing = false);
+
+    ui.modalButton.addEventListener("click", () => {
+      if (gameState === "intro" || gameState === "over") {
+        player.hp = player.maxHp;
+        player.coins = Math.max(40, Math.floor(player.coins * .35));
+        player.weapon = 0;
+        player.deliveries = 0;
+        resetLevel(1);
+        gameState = "play";
+        hideModal();
+        return;
+      }
+      if (gameState === "levelClear") {
+        resetLevel(player.level + 1);
+        gameState = "play";
+        hideModal();
+      }
+    });
+
+    resetLevel(1);
+    gameState = "intro";
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
