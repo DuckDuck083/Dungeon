@@ -323,7 +323,9 @@
         <div class="controls">
           <div class="pill"><strong>Move</strong><span class="kbd">WASD</span></div>
           <div class="pill"><strong>Aim</strong><span class="kbd">Mouse</span></div>
-          <div class="pill"><strong>Shoot</strong><span class="kbd">Click</span></div>
+          <div class="pill"><strong>Primary</strong><span class="kbd">Click</span></div>
+          <div class="pill"><strong>Bottle</strong><span class="kbd">Q</span></div>
+          <div class="pill"><strong>Third weapon</strong><span class="kbd">F</span></div>
           <div class="pill"><strong>Open chest</strong><span class="kbd">E</span></div>
           <div class="pill"><strong>Dash</strong><span class="kbd">Shift</span></div>
         </div>
@@ -356,6 +358,7 @@
     const walls = new Set();
     const bullets = [];
     const slashes = [];
+    const healthPacks = [];
     const particles = [];
     const enemies = [];
     const chests = [];
@@ -368,15 +371,11 @@
     let gameState = "intro";
     let messageTimer = 0;
 
-    const weapons = [
-      { name: "Sword", cost: 0, damage: 34, fireRate: 360, melee: true, range: 64, arc: 1.35, color: "#fff7cc" },
-      { name: "Twin Daggers", cost: 85, damage: 20, fireRate: 170, melee: true, range: 52, arc: 1.05, color: "#a8ffe2", dash: true },
-      { name: "Greatsword", cost: 145, damage: 64, fireRate: 680, melee: true, range: 84, arc: 1.75, color: "#ffd66b", knockback: 26 },
-      { name: "Pistol", cost: 120, damage: 18, fireRate: 270, speed: 600, spread: 0, bullets: 1, color: "#f5c84c" },
-      { name: "Frost Shotgun", cost: 240, damage: 14, fireRate: 560, speed: 500, spread: .42, bullets: 6, slow: 1.6, color: "#8bd8ff" },
-      { name: "Lightning Staff", cost: 360, damage: 24, fireRate: 410, speed: 690, spread: .02, bullets: 1, chain: 3, pierce: 1, color: "#d7b7ff" },
-      { name: "Rocket Launcher", cost: 560, damage: 54, fireRate: 780, speed: 430, spread: .015, bullets: 1, explosive: 86, color: "#ff9b54", r: 8 }
-    ];
+    const weapons = {
+      primary: { name: "Courier Sword", baseCost: 90, damage: 34, fireRate: 330, melee: true, range: 68, arc: 1.35, color: "#fff7cc" },
+      bottle: { name: "Bottle Smash", baseCost: 75, damage: 28, fireRate: 620, melee: true, range: 58, arc: 1.6, color: "#a8ffe2", slow: 1.2, knockback: 18 },
+      third: { name: "Spark Boomerang", baseCost: 120, damage: 22, fireRate: 520, speed: 520, spread: 0, bullets: 1, color: "#d7b7ff", pierce: 2, chain: 1, boomerang: true }
+    };
 
     const player = {
       x: 78,
@@ -388,9 +387,11 @@
       level: 1,
       room: 0,
       roomsPerLevel: 6,
-      weapon: 0,
-      ownedWeapons: [0],
+      activeSlot: "primary",
+      weaponLevels: { primary: 1, bottle: 1, third: 1 },
       lastShot: 0,
+      lastBottle: 0,
+      lastThird: 0,
       dash: 0,
       roomStartHp: 100,
       roomStartTime: 0,
@@ -447,6 +448,7 @@
       chests.length = 0;
       spawners.length = 0;
       guards.length = 0;
+      healthPacks.length = 0;
       torches.length = 0;
       walls.clear();
 
@@ -563,7 +565,7 @@
 
       for (let i = 0; i < monsterCount; i++) {
         const p = randomOpenTile(5);
-        enemies.push(makeEnemy(p.x, p.y, "monster"));
+        enemies.push(makeEnemy(p.x, p.y, pickEnemyType(i, depth)));
       }
       for (let i = 0; i < guardCount; i++) {
         const p = randomOpenTile(6);
@@ -587,18 +589,35 @@
     function makeEnemy(x, y, type) {
       const hard = player.level + player.room - 1;
       const isGuard = type === "guard";
+      const stats = {
+        monster: { r: 14, hp: 34, speed: 98, damage: 10, color: "#a63b3b", coins: 9 },
+        charger: { r: 13, hp: 28, speed: 136, damage: 13, color: "#db6b3f", coins: 12 },
+        brute: { r: 21, hp: 82, speed: 62, damage: 22, color: "#7a3949", coins: 22 },
+        shaman: { r: 15, hp: 42, speed: 72, damage: 8, color: "#4d9f86", coins: 18 },
+        guard: { r: 17, hp: 55, speed: 80, damage: 15, color: "#477fb6", coins: 16 }
+      }[type];
       return {
         x,
         y,
-        r: isGuard ? 17 : 14,
-        hp: isGuard ? 55 + hard * 18 : 34 + hard * 12,
-        maxHp: isGuard ? 55 + hard * 18 : 34 + hard * 12,
-        speed: isGuard ? 80 + hard * 5 : 98 + hard * 7,
-        damage: isGuard ? 15 + hard * 2 : 10 + hard * 2,
+        r: stats.r,
+        hp: stats.hp + hard * (isGuard ? 18 : type === "brute" ? 22 : 12),
+        maxHp: stats.hp + hard * (isGuard ? 18 : type === "brute" ? 22 : 12),
+        speed: stats.speed + hard * (type === "brute" ? 3 : 6),
+        damage: stats.damage + hard * 2,
+        color: stats.color,
+        coins: stats.coins,
         type,
         hitTimer: 0,
+        specialTimer: 1 + Math.random(),
         attackTimer: 0
       };
+    }
+
+    function pickEnemyType(index, depth) {
+      if (depth > 2 && index % 7 === 0) return "brute";
+      if (depth > 1 && index % 4 === 0) return "charger";
+      if (depth > 3 && index % 6 === 0) return "shaman";
+      return "monster";
     }
 
     function randomOpenTile(minDistance) {
@@ -630,6 +649,7 @@
       movePlayer(dt);
       updateBullets(dt);
       updateSlashes(dt);
+      updateHealthPacks();
       updateEnemies(dt);
       updateSpawners(dt);
       updateParticles(dt);
@@ -671,18 +691,21 @@
       return points.some(([px, py]) => walls.has(`${Math.floor(px / TILE)},${Math.floor(py / TILE)}`));
     }
 
-    function shoot(time) {
-      const weapon = weapons[player.weapon];
-      if (time - player.lastShot < weapon.fireRate) return;
-      player.lastShot = time;
+    function shoot(time, slot = "primary") {
+      const weapon = scaledWeapon(slot);
+      const cooldownKey = slot === "primary" ? "lastShot" : slot === "bottle" ? "lastBottle" : "lastThird";
+      if (time - player[cooldownKey] < weapon.fireRate) return;
+      player[cooldownKey] = time;
+      player.activeSlot = slot;
       const baseAngle = Math.atan2(pointer.y - player.y, pointer.x - player.x);
       if (weapon.melee) {
-        slashes.push({ x: player.x, y: player.y, angle: baseAngle, life: .14, maxLife: .14, range: weapon.range });
+        slashes.push({ x: player.x, y: player.y, angle: baseAngle, life: .14, maxLife: .14, range: weapon.range, color: weapon.color });
         for (const enemy of enemies.concat(guards)) {
           const dist = Math.hypot(enemy.x - player.x, enemy.y - player.y);
           const angle = Math.atan2(enemy.y - player.y, enemy.x - player.x);
           if (dist < weapon.range + enemy.r && angleDiff(baseAngle, angle) < weapon.arc / 2) {
             damageEnemy(enemy, weapon.damage);
+            if (weapon.slow) enemy.slowTimer = Math.max(enemy.slowTimer || 0, weapon.slow);
             if (weapon.knockback) tryMove(enemy, Math.cos(baseAngle) * weapon.knockback, Math.sin(baseAngle) * weapon.knockback);
           }
         }
@@ -703,7 +726,7 @@
         if (weapon.dash) {
           tryMove(player, Math.cos(baseAngle) * 22, Math.sin(baseAngle) * 22);
         }
-        burst(player.x + Math.cos(baseAngle) * 28, player.y + Math.sin(baseAngle) * 28, "#fff0a8", 8);
+        burst(player.x + Math.cos(baseAngle) * 28, player.y + Math.sin(baseAngle) * 28, weapon.color, 8);
         return;
       }
       for (let i = 0; i < weapon.bullets; i++) {
@@ -716,13 +739,30 @@
           vy: Math.sin(angle) * weapon.speed,
           damage: weapon.damage,
           weapon,
+          owner: "player",
           life: .9,
+          age: 0,
+          startX: player.x,
+          startY: player.y,
           pierce: weapon.pierce || 0,
           hit: new Set(),
           r: weapon.r || 5
         });
       }
-      burst(player.x + Math.cos(baseAngle) * 24, player.y + Math.sin(baseAngle) * 24, "#f5c84c", 4);
+      burst(player.x + Math.cos(baseAngle) * 24, player.y + Math.sin(baseAngle) * 24, weapon.color, 4);
+    }
+
+    function scaledWeapon(slot) {
+      const base = weapons[slot];
+      const level = player.weaponLevels[slot];
+      return {
+        ...base,
+        damage: Math.round(base.damage * (1 + (level - 1) * .32)),
+        range: base.range ? base.range + (level - 1) * 7 : base.range,
+        fireRate: Math.max(150, base.fireRate - (level - 1) * 24),
+        chain: base.chain ? base.chain + Math.floor((level - 1) / 2) : base.chain,
+        pierce: base.pierce ? base.pierce + Math.floor((level - 1) / 2) : base.pierce
+      };
     }
 
     function updateSlashes(dt) {
@@ -739,6 +779,17 @@
     function updateBullets(dt) {
       for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
+        b.age += dt;
+        if (b.weapon.boomerang && b.age > .45) {
+          const angle = Math.atan2(player.y - b.y, player.x - b.x);
+          b.vx = Math.cos(angle) * b.weapon.speed;
+          b.vy = Math.sin(angle) * b.weapon.speed;
+          b.life += dt * .35;
+          if (Math.hypot(player.x - b.x, player.y - b.y) < 28 && b.age > .65) {
+            bullets.splice(i, 1);
+            continue;
+          }
+        }
         b.x += b.vx * dt;
         b.y += b.vy * dt;
         b.life -= dt;
@@ -827,15 +878,28 @@
     function damageEnemy(enemy, damage) {
       enemy.hp -= damage;
       enemy.hitTimer = .1;
-      burst(enemy.x, enemy.y, enemy.type === "guard" ? "#65a8ff" : "#e05252", 5);
+      burst(enemy.x, enemy.y, enemy.color || (enemy.type === "guard" ? "#65a8ff" : "#e05252"), 5);
       if (enemy.hp <= 0) {
         const list = enemy.type === "guard" ? guards : enemies;
         list.splice(list.indexOf(enemy), 1);
         player.kills++;
-        player.coins += enemy.type === "guard" ? 16 : 9;
-        if (Math.random() < .18) {
-          player.hp = Math.min(player.maxHp, player.hp + 10);
-          showMessage("Enemy dropped a med pack.");
+        player.coins += enemy.coins || (enemy.type === "guard" ? 16 : 9);
+        if (Math.random() < .24) {
+          healthPacks.push({ x: enemy.x, y: enemy.y, r: 13, heal: 18 + player.level * 2, bob: Math.random() * 10 });
+          showMessage("Health pack dropped.");
+        }
+      }
+    }
+
+    function updateHealthPacks() {
+      for (let i = healthPacks.length - 1; i >= 0; i--) {
+        const pack = healthPacks[i];
+        pack.bob += .08;
+        if (Math.hypot(player.x - pack.x, player.y - pack.y) < player.r + pack.r + 4) {
+          player.hp = Math.min(player.maxHp, player.hp + pack.heal);
+          burst(pack.x, pack.y, "#57c56b", 14);
+          healthPacks.splice(i, 1);
+          showMessage(`Picked up health: +${pack.heal}.`);
         }
       }
     }
@@ -846,11 +910,23 @@
         enemy.attackTimer -= dt;
         enemy.slowTimer = Math.max(0, (enemy.slowTimer || 0) - dt);
         const dist = Math.hypot(player.x - enemy.x, player.y - enemy.y);
+        enemy.specialTimer -= dt;
+        if (enemy.type === "shaman" && enemy.specialTimer <= 0) {
+          const target = enemies.concat(guards).find(e => e !== enemy && Math.hypot(e.x - enemy.x, e.y - enemy.y) < 170);
+          if (target) {
+            target.hp = Math.min(target.maxHp, target.hp + 18 + player.level * 3);
+            burst(target.x, target.y, "#57c56b", 10);
+          }
+          enemy.specialTimer = 2.8;
+        }
         if (dist < 420 || enemy.type === "guard") {
           const dx = (player.x - enemy.x) / (dist || 1);
           const dy = (player.y - enemy.y) / (dist || 1);
           const slow = enemy.slowTimer > 0 ? .45 : 1;
-          tryMove(enemy, dx * enemy.speed * slow * dt, dy * enemy.speed * slow * dt);
+          let speedBoost = 1;
+          if (enemy.type === "charger" && dist < 230) speedBoost = 1.55;
+          if (enemy.type === "shaman" && dist < 180) speedBoost = -.65;
+          tryMove(enemy, dx * enemy.speed * speedBoost * slow * dt, dy * enemy.speed * speedBoost * slow * dt);
         }
         if (dist < enemy.r + player.r + 5 && enemy.attackTimer <= 0) {
           hurtPlayer(enemy.damage);
@@ -947,6 +1023,7 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       drawMap();
       drawChests();
+      drawHealthPacks();
       drawSpawners();
       if (isFinalRoom()) drawBoss();
       for (const enemy of enemies) drawEnemy(enemy);
@@ -955,7 +1032,6 @@
       drawSlashes();
       drawBullets();
       drawParticles();
-      drawDarkness();
       drawMinimapHint();
     }
 
@@ -1049,7 +1125,7 @@
       ctx.save();
       ctx.translate(player.x, player.y);
       ctx.rotate(angle);
-      if (weapons[player.weapon].melee) {
+      if (scaledWeapon(player.activeSlot).melee) {
         px(10, -3, 31, 6, palette.outline);
         px(14, -2, 28, 3, "#d7dee7");
         px(36, -1, 7, 2, "#fff7cc");
@@ -1071,7 +1147,7 @@
     function drawEnemy(enemy) {
       drawShadow(enemy.x, enemy.y + 10, enemy.r + 2, 5);
       if (enemy.type === "guard") {
-        const armor = enemy.hitTimer > 0 ? "#ffffff" : "#477fb6";
+        const armor = enemy.hitTimer > 0 ? "#ffffff" : enemy.color;
         pixelSprite(enemy.x, enemy.y, [
           ["outline", -13, -17, 26, 32],
           ["helm", -10, -19, 20, 10],
@@ -1084,7 +1160,9 @@
           ["gold", 10, -1, 5, 13]
         ], { outline: palette.outline, helm: "#aeb7c2", face: "#c89561", armor, trim: "#d7dee7", dark: "#24313f", gold: "#d7a443" });
       } else {
-        const body = enemy.hitTimer > 0 ? "#ffffff" : "#a63b3b";
+        const body = enemy.hitTimer > 0 ? "#ffffff" : enemy.color;
+        const horn = enemy.type === "shaman" ? "#97f0c5" : "#d6c6a1";
+        const eye = enemy.type === "charger" ? "#ffffff" : enemy.type === "shaman" ? "#b8ffde" : "#ffd66b";
         pixelSprite(enemy.x, enemy.y, [
           ["outline", -15, -14, 30, 27],
           ["body", -12, -12, 24, 24],
@@ -1095,9 +1173,20 @@
           ["eye", -7, -4, 5, 4],
           ["eye", 2, -4, 5, 4],
           ["mouth", -5, 7, 10, 3]
-        ], { outline: palette.outline, body, dark: "#6f232b", horn: "#d6c6a1", eye: "#ffd66b", mouth: "#251111" });
+        ], { outline: palette.outline, body, dark: "#6f232b", horn, eye, mouth: "#251111" });
       }
       drawHealth(enemy.x, enemy.y - enemy.r - 10, enemy.hp / enemy.maxHp, enemy.r * 2);
+    }
+
+    function drawHealthPacks() {
+      for (const pack of healthPacks) {
+        const bob = Math.sin(pack.bob) * 3;
+        drawShadow(pack.x, pack.y + 12, 14, 5);
+        px(pack.x - 12, pack.y - 9 + bob, 24, 18, palette.outline);
+        px(pack.x - 10, pack.y - 7 + bob, 20, 14, "#f4f1e7");
+        px(pack.x - 3, pack.y - 6 + bob, 6, 12, "#57c56b");
+        px(pack.x - 8, pack.y - 1 + bob, 16, 4, "#57c56b");
+      }
     }
 
     function drawSpawners() {
@@ -1167,7 +1256,7 @@
     function drawBullets() {
       for (const b of bullets) {
         px(b.x - 5, b.y - 3, 10, 6, "#7b4d17");
-        px(b.x - 3, b.y - 2, 8, 4, "#f5c84c");
+        px(b.x - 3, b.y - 2, 8, 4, b.weapon.color || "#f5c84c");
         px(b.x + 3, b.y - 1, 4, 2, "#fff0a8");
       }
     }
@@ -1179,7 +1268,7 @@
         ctx.translate(slash.x, slash.y);
         ctx.rotate(slash.angle);
         ctx.globalAlpha = Math.max(.15, t);
-        ctx.fillStyle = "#fff7cc";
+        ctx.fillStyle = slash.color || "#fff7cc";
         ctx.beginPath();
         ctx.moveTo(12, -8);
         ctx.lineTo(slash.range, -24);
@@ -1236,7 +1325,7 @@
       ctx.fillStyle = palette.void;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.globalCompositeOperation = "destination-out";
-      cutLight(player.x, player.y, weapons[player.weapon].melee ? 245 : 285, 1);
+      cutLight(player.x, player.y, scaledWeapon(player.activeSlot).melee ? 245 : 285, 1);
       for (const torch of torches) {
         cutLight(torch.x * TILE + TILE / 2, torch.y * TILE + TILE / 2, 145, .86);
       }
@@ -1336,28 +1425,35 @@
       ui.healthBar.style.width = `${Math.max(0, player.hp / player.maxHp * 100)}%`;
       ui.coinsText.textContent = player.coins;
       ui.levelText.textContent = `${player.level}-${player.room + 1}`;
-      ui.weaponText.textContent = weapons[player.weapon].name;
+      ui.weaponText.textContent = `${weapons.primary.name} Lv.${player.weaponLevels.primary}`;
       renderShop();
       renderTasks();
     }
 
     function renderShop() {
       ui.shop.innerHTML = "";
-      weapons.forEach((weapon, index) => {
+      for (const slot of ["primary", "bottle", "third"]) {
+        const weapon = weapons[slot];
+        const level = player.weaponLevels[slot];
+        const cost = upgradeCost(slot);
         const btn = document.createElement("button");
-        const owned = index <= player.weapon;
-        btn.textContent = owned ? `${weapon.name} owned` : `Buy ${weapon.name} - ${weapon.cost} coins`;
-        btn.disabled = owned || player.coins < weapon.cost || gameState === "intro";
+        btn.textContent = `${weapon.name} Lv.${level} -> ${cost} coins`;
+        btn.disabled = player.coins < cost || gameState === "intro";
         btn.addEventListener("click", () => {
-          if (player.coins >= weapon.cost && index > player.weapon) {
-            player.coins -= weapon.cost;
-            player.weapon = index;
-            showMessage(`${weapon.name} equipped.`);
+          if (player.coins >= cost) {
+            player.coins -= cost;
+            player.weaponLevels[slot]++;
+            showMessage(`${weapon.name} upgraded to level ${player.weaponLevels[slot]}.`);
             updateUi();
           }
         });
         ui.shop.appendChild(btn);
-      });
+      }
+    }
+
+    function upgradeCost(slot) {
+      const level = player.weaponLevels[slot];
+      return weapons[slot].baseCost + level * level * 45;
     }
 
     function renderTasks() {
@@ -1405,6 +1501,8 @@
     window.addEventListener("keydown", (event) => {
       keys.add(event.key.toLowerCase());
       if (event.key.toLowerCase() === "e") openNearbyChest();
+      if (event.key.toLowerCase() === "q") shoot(performance.now(), "bottle");
+      if (event.key.toLowerCase() === "f") shoot(performance.now(), "third");
     });
 
     window.addEventListener("keyup", (event) => keys.delete(event.key.toLowerCase()));
@@ -1424,7 +1522,8 @@
       if (gameState === "intro" || gameState === "over") {
         player.hp = player.maxHp;
         player.coins = Math.max(40, Math.floor(player.coins * .35));
-        player.weapon = 0;
+        player.activeSlot = "primary";
+        player.weaponLevels = { primary: 1, bottle: 1, third: 1 };
         player.deliveries = 0;
         resetLevel(1);
         gameState = "play";
