@@ -133,10 +133,38 @@
       background: var(--green);
     }
 
-    .weapon-list, .task-list, .controls, .log {
+    .weapon-list, .task-list, .controls, .log, .hotbar {
       display: grid;
       gap: 8px;
       margin-top: 10px;
+    }
+
+    .hotbar {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+
+    .slot {
+      min-height: 52px;
+      padding: 6px;
+      color: var(--muted);
+      background: #191d24;
+      border: 1px solid #333944;
+      border-radius: 7px;
+      text-align: center;
+      font-size: 11px;
+    }
+
+    .slot.active {
+      color: var(--ink);
+      border-color: var(--gold);
+      box-shadow: inset 0 0 0 1px rgba(245, 200, 76, .55);
+    }
+
+    .slot strong {
+      display: block;
+      margin-bottom: 3px;
+      color: inherit;
+      font-size: 12px;
     }
 
     button {
@@ -309,7 +337,12 @@
       </section>
 
       <section class="panel">
-        <h2>Blacksmith</h2>
+        <h2>Hotbar</h2>
+        <div class="hotbar" id="hotbar"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Workbench</h2>
         <div class="weapon-list" id="shop"></div>
       </section>
 
@@ -323,9 +356,8 @@
         <div class="controls">
           <div class="pill"><strong>Move</strong><span class="kbd">WASD</span></div>
           <div class="pill"><strong>Aim</strong><span class="kbd">Mouse</span></div>
-          <div class="pill"><strong>Primary</strong><span class="kbd">Click</span></div>
-          <div class="pill"><strong>Bottle</strong><span class="kbd">Q</span></div>
-          <div class="pill"><strong>Third weapon</strong><span class="kbd">F</span></div>
+          <div class="pill"><strong>Use slot</strong><span class="kbd">Click</span></div>
+          <div class="pill"><strong>Select</strong><span class="kbd">1-5</span></div>
           <div class="pill"><strong>Open chest</strong><span class="kbd">E</span></div>
           <div class="pill"><strong>Dash</strong><span class="kbd">Shift</span></div>
         </div>
@@ -343,6 +375,7 @@
       coinsText: document.querySelector("#coinsText"),
       levelText: document.querySelector("#levelText"),
       weaponText: document.querySelector("#weaponText"),
+      hotbar: document.querySelector("#hotbar"),
       shop: document.querySelector("#shop"),
       tasks: document.querySelector("#tasks"),
       message: document.querySelector("#message"),
@@ -371,10 +404,19 @@
     let gameState = "intro";
     let messageTimer = 0;
 
-    const weapons = {
-      primary: { name: "Courier Sword", baseCost: 90, damage: 34, fireRate: 330, melee: true, range: 68, arc: 1.35, color: "#fff7cc" },
-      bottle: { name: "Bottle Smash", baseCost: 75, damage: 28, fireRate: 620, melee: true, range: 58, arc: 1.6, color: "#a8ffe2", slow: 1.2, knockback: 18 },
-      third: { name: "Spark Boomerang", baseCost: 120, damage: 22, fireRate: 520, speed: 520, spread: 0, bullets: 1, color: "#d7b7ff", pierce: 2, chain: 1, boomerang: true }
+    const weaponCatalog = {
+      sword: { name: "Courier Sword", rarity: "starter", damage: 34, fireRate: 330, melee: true, range: 68, arc: 1.35, color: "#fff7cc", model: "sword" },
+      pistol: { name: "Pistol", rarity: "common", damage: 18, fireRate: 285, speed: 610, spread: 0, bullets: 1, color: "#f5c84c", model: "pistol" },
+      scattergun: { name: "Scattergun", rarity: "uncommon", damage: 13, fireRate: 560, speed: 500, spread: .42, bullets: 6, color: "#8bd8ff", model: "shotgun" },
+      rifle: { name: "Rifle", rarity: "uncommon", damage: 30, fireRate: 260, speed: 760, spread: .02, bullets: 1, pierce: 1, color: "#d7dee7", model: "rifle" },
+      smg: { name: "Machine Gun", rarity: "rare", damage: 13, fireRate: 105, speed: 650, spread: .16, bullets: 1, color: "#a8ffe2", model: "smg" },
+      ak: { name: "AK-47", rarity: "epic", damage: 25, fireRate: 145, speed: 720, spread: .08, bullets: 1, pierce: 1, color: "#ffcf7a", model: "ak" },
+      blaster: { name: "Blaster", rarity: "legendary", damage: 42, fireRate: 340, speed: 650, spread: .08, bullets: 2, chain: 2, color: "#d7b7ff", model: "blaster" }
+    };
+
+    const itemCatalog = {
+      speedPill: { name: "Speed Pill", type: "speed", uses: 3, duration: 5, color: "#65a8ff" },
+      medPack: { name: "Med Pack", type: "heal", uses: 1, heal: 45, color: "#57c56b" }
     };
 
     const player = {
@@ -387,11 +429,16 @@
       level: 1,
       room: 0,
       roomsPerLevel: 6,
-      activeSlot: "primary",
-      weaponLevels: { primary: 1, bottle: 1, third: 1 },
+      hotbar: [
+        { kind: "weapon", id: "sword", level: 1 },
+        { kind: "item", id: "speedPill", uses: 3 },
+        { kind: "item", id: "medPack", uses: 1 },
+        null,
+        null
+      ],
+      activeSlot: 0,
       lastShot: 0,
-      lastBottle: 0,
-      lastThird: 0,
+      speedTimer: 0,
       dash: 0,
       roomStartHp: 100,
       roomStartTime: 0,
@@ -645,6 +692,7 @@
     function update(dt, time) {
       if (gameState !== "play") return;
       messageTimer -= dt;
+      player.speedTimer = Math.max(0, player.speedTimer - dt);
       if (messageTimer <= 0) ui.message.style.opacity = 0;
       movePlayer(dt);
       updateBullets(dt);
@@ -655,7 +703,7 @@
       updateParticles(dt);
       checkDoorTransition();
       checkDelivery();
-      if (firing) shoot(time);
+      if (firing) useHotbar(time);
       updateUi();
     }
 
@@ -668,7 +716,7 @@
       if (keys.has("d")) dx++;
       const len = Math.hypot(dx, dy) || 1;
       const dashing = keys.has("shift") && player.dash <= 0 && (dx || dy);
-      const speed = dashing ? 420 : 200;
+      const speed = (dashing ? 420 : 200) * (player.speedTimer > 0 ? 1.65 : 1);
       if (dashing) {
         player.dash = .9;
         burst(player.x, player.y, "#65a8ff", 18);
@@ -691,12 +739,22 @@
       return points.some(([px, py]) => walls.has(`${Math.floor(px / TILE)},${Math.floor(py / TILE)}`));
     }
 
-    function shoot(time, slot = "primary") {
-      const weapon = scaledWeapon(slot);
-      const cooldownKey = slot === "primary" ? "lastShot" : slot === "bottle" ? "lastBottle" : "lastThird";
-      if (time - player[cooldownKey] < weapon.fireRate) return;
-      player[cooldownKey] = time;
-      player.activeSlot = slot;
+    function useHotbar(time) {
+      const entry = player.hotbar[player.activeSlot];
+      if (!entry) return;
+      if (entry.kind === "item") {
+        if (time - player.lastShot < 350) return;
+        player.lastShot = time;
+        useItem(entry);
+        return;
+      }
+      shoot(time, entry);
+    }
+
+    function shoot(time, entry) {
+      const weapon = scaledWeapon(entry);
+      if (time - player.lastShot < weapon.fireRate) return;
+      player.lastShot = time;
       const baseAngle = Math.atan2(pointer.y - player.y, pointer.x - player.x);
       if (weapon.melee) {
         slashes.push({ x: player.x, y: player.y, angle: baseAngle, life: .14, maxLife: .14, range: weapon.range, color: weapon.color });
@@ -752,9 +810,9 @@
       burst(player.x + Math.cos(baseAngle) * 24, player.y + Math.sin(baseAngle) * 24, weapon.color, 4);
     }
 
-    function scaledWeapon(slot) {
-      const base = weapons[slot];
-      const level = player.weaponLevels[slot];
+    function scaledWeapon(entry) {
+      const base = weaponCatalog[entry.id];
+      const level = entry.level || 1;
       return {
         ...base,
         damage: Math.round(base.damage * (1 + (level - 1) * .32)),
@@ -763,6 +821,22 @@
         chain: base.chain ? base.chain + Math.floor((level - 1) / 2) : base.chain,
         pierce: base.pierce ? base.pierce + Math.floor((level - 1) / 2) : base.pierce
       };
+    }
+
+    function useItem(entry) {
+      const item = itemCatalog[entry.id];
+      if (!item || entry.uses <= 0) return;
+      entry.uses--;
+      if (item.type === "speed") {
+        player.speedTimer = Math.max(player.speedTimer, item.duration);
+        showMessage("Speed pill active.");
+      }
+      if (item.type === "heal") {
+        player.hp = Math.min(player.maxHp, player.hp + item.heal);
+        burst(player.x, player.y, item.color, 18);
+        showMessage(`Med pack used: +${item.heal} health.`);
+      }
+      if (entry.uses <= 0) player.hotbar[player.activeSlot] = null;
     }
 
     function updateSlashes(dt) {
@@ -780,16 +854,6 @@
       for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
         b.age += dt;
-        if (b.weapon.boomerang && b.age > .45) {
-          const angle = Math.atan2(player.y - b.y, player.x - b.x);
-          b.vx = Math.cos(angle) * b.weapon.speed;
-          b.vy = Math.sin(angle) * b.weapon.speed;
-          b.life += dt * .35;
-          if (Math.hypot(player.x - b.x, player.y - b.y) < 28 && b.age > .65) {
-            bullets.splice(i, 1);
-            continue;
-          }
-        }
         b.x += b.vx * dt;
         b.y += b.vy * dt;
         b.life -= dt;
@@ -1003,12 +1067,45 @@
           chest.opened = true;
           player.opened++;
           player.coins += chest.coins;
-          if (Math.random() < .45) player.hp = Math.min(player.maxHp, player.hp + 15);
+          const loot = rollChestLoot();
+          if (loot) addLootToHotbar(loot);
           burst(chest.x, chest.y, "#f5c84c", 18);
-          showMessage(`Chest opened: ${chest.coins} coins.`);
+          showMessage(loot ? `Chest: ${chest.coins} coins and ${lootName(loot)}.` : `Chest opened: ${chest.coins} coins.`);
           return;
         }
       }
+    }
+
+    function rollChestLoot() {
+      const roll = Math.random();
+      if (roll < .22) return { kind: "item", id: "medPack", uses: 1 };
+      if (roll < .46) return { kind: "item", id: "speedPill", uses: 3 };
+      if (roll < .72) return { kind: "weapon", id: "pistol", level: 1 };
+      if (roll < .86) return { kind: "weapon", id: "scattergun", level: 1 };
+      if (roll < .94) return { kind: "weapon", id: "rifle", level: 1 };
+      if (roll < .985) return { kind: "weapon", id: "smg", level: 1 };
+      if (roll < .997) return { kind: "weapon", id: "ak", level: 1 };
+      return { kind: "weapon", id: "blaster", level: 1 };
+    }
+
+    function addLootToHotbar(loot) {
+      if (loot.kind === "item") {
+        const existing = player.hotbar.find(entry => entry && entry.kind === "item" && entry.id === loot.id);
+        if (existing) {
+          existing.uses += loot.uses;
+          return;
+        }
+      }
+      const empty = player.hotbar.findIndex(entry => !entry);
+      if (empty >= 0) {
+        player.hotbar[empty] = loot;
+        return;
+      }
+      player.hotbar[player.activeSlot] = loot;
+    }
+
+    function lootName(loot) {
+      return loot.kind === "weapon" ? weaponCatalog[loot.id].name : itemCatalog[loot.id].name;
     }
 
     function burst(x, y, color, count) {
@@ -1125,16 +1222,7 @@
       ctx.save();
       ctx.translate(player.x, player.y);
       ctx.rotate(angle);
-      if (scaledWeapon(player.activeSlot).melee) {
-        px(10, -3, 31, 6, palette.outline);
-        px(14, -2, 28, 3, "#d7dee7");
-        px(36, -1, 7, 2, "#fff7cc");
-        px(7, -6, 7, 12, "#8b5a2b");
-      } else {
-        px(12, -5, 25, 10, palette.outline);
-        px(15, -3, 21, 5, "#303640");
-        px(33, -2, 6, 4, "#cfd2d6");
-      }
+      drawHeldModel(player.hotbar[player.activeSlot]);
       ctx.restore();
       if (player.package) {
         px(player.x - 11, player.y - 34, 22, 16, palette.outline);
@@ -1142,6 +1230,52 @@
         px(player.x - 1, player.y - 32, 3, 12, "#7b5c18");
         px(player.x - 9, player.y - 27, 18, 2, "#f2c66a");
       }
+    }
+
+    function drawHeldModel(entry) {
+      if (!entry) return;
+      if (entry.kind === "item") {
+        const color = itemCatalog[entry.id].color;
+        px(15, -6, 12, 12, palette.outline);
+        px(17, -4, 8, 8, color);
+        return;
+      }
+      const weapon = weaponCatalog[entry.id];
+      if (weapon.model === "sword") {
+        px(10, -3, 31, 6, palette.outline);
+        px(14, -2, 28, 3, "#d7dee7");
+        px(36, -1, 7, 2, "#fff7cc");
+        px(7, -6, 7, 12, "#8b5a2b");
+        return;
+      }
+      if (weapon.model === "pistol") {
+        px(12, -5, 24, 10, palette.outline);
+        px(15, -3, 17, 5, "#303640");
+        px(29, 2, 7, 8, "#594437");
+        return;
+      }
+      if (weapon.model === "shotgun") {
+        px(10, -6, 42, 12, palette.outline);
+        px(14, -3, 36, 5, "#47505a");
+        px(18, 2, 16, 8, "#8b5a2b");
+        return;
+      }
+      if (weapon.model === "rifle" || weapon.model === "ak") {
+        px(9, -5, 49, 10, palette.outline);
+        px(14, -3, 42, 4, weapon.model === "ak" ? "#6b4b2d" : "#3f4852");
+        px(23, 2, 15, 9, "#8b5a2b");
+        px(39, -9, 6, 5, "#20242c");
+        return;
+      }
+      if (weapon.model === "smg") {
+        px(12, -6, 34, 12, palette.outline);
+        px(16, -3, 28, 5, "#303640");
+        px(30, 2, 8, 12, "#20242c");
+        return;
+      }
+      px(10, -7, 38, 14, palette.outline);
+      px(15, -4, 31, 8, weapon.color);
+      px(34, -10, 10, 7, "#d7b7ff");
     }
 
     function drawEnemy(enemy) {
@@ -1325,7 +1459,8 @@
       ctx.fillStyle = palette.void;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.globalCompositeOperation = "destination-out";
-      cutLight(player.x, player.y, scaledWeapon(player.activeSlot).melee ? 245 : 285, 1);
+      const active = player.hotbar[player.activeSlot];
+      cutLight(player.x, player.y, active && active.kind === "weapon" && scaledWeapon(active).melee ? 245 : 285, 1);
       for (const torch of torches) {
         cutLight(torch.x * TILE + TILE / 2, torch.y * TILE + TILE / 2, 145, .86);
       }
@@ -1425,35 +1560,57 @@
       ui.healthBar.style.width = `${Math.max(0, player.hp / player.maxHp * 100)}%`;
       ui.coinsText.textContent = player.coins;
       ui.levelText.textContent = `${player.level}-${player.room + 1}`;
-      ui.weaponText.textContent = `${weapons.primary.name} Lv.${player.weaponLevels.primary}`;
+      const active = player.hotbar[player.activeSlot];
+      ui.weaponText.textContent = active ? lootName(active) : "Empty";
+      renderHotbar();
       renderShop();
       renderTasks();
     }
 
-    function renderShop() {
-      ui.shop.innerHTML = "";
-      for (const slot of ["primary", "bottle", "third"]) {
-        const weapon = weapons[slot];
-        const level = player.weaponLevels[slot];
-        const cost = upgradeCost(slot);
-        const btn = document.createElement("button");
-        btn.textContent = `${weapon.name} Lv.${level} -> ${cost} coins`;
-        btn.disabled = player.coins < cost || gameState === "intro";
-        btn.addEventListener("click", () => {
-          if (player.coins >= cost) {
-            player.coins -= cost;
-            player.weaponLevels[slot]++;
-            showMessage(`${weapon.name} upgraded to level ${player.weaponLevels[slot]}.`);
-            updateUi();
-          }
+    function renderHotbar() {
+      ui.hotbar.innerHTML = "";
+      player.hotbar.forEach((entry, index) => {
+        const slot = document.createElement("button");
+        slot.className = `slot${index === player.activeSlot ? " active" : ""}`;
+        const label = entry ? lootName(entry) : "Empty";
+        const detail = entry ? entry.kind === "weapon" ? `Lv.${entry.level || 1}` : `${entry.uses} use${entry.uses === 1 ? "" : "s"}` : "";
+        slot.innerHTML = `<strong>${index + 1}</strong>${label}<br>${detail}`;
+        slot.addEventListener("click", () => {
+          player.activeSlot = index;
+          updateUi();
         });
-        ui.shop.appendChild(btn);
-      }
+        ui.hotbar.appendChild(slot);
+      });
     }
 
-    function upgradeCost(slot) {
-      const level = player.weaponLevels[slot];
-      return weapons[slot].baseCost + level * level * 45;
+    function renderShop() {
+      ui.shop.innerHTML = "";
+      const entry = player.hotbar[player.activeSlot];
+      const btn = document.createElement("button");
+      if (!entry || entry.kind !== "weapon") {
+        btn.textContent = "Select a weapon to upgrade";
+        btn.disabled = true;
+        ui.shop.appendChild(btn);
+        return;
+      }
+      const cost = upgradeCost(entry);
+      btn.textContent = `Upgrade ${lootName(entry)} Lv.${entry.level || 1} - ${cost} coins`;
+      btn.disabled = player.coins < cost || gameState === "intro";
+      btn.addEventListener("click", () => {
+        if (player.coins >= cost) {
+          player.coins -= cost;
+          entry.level = (entry.level || 1) + 1;
+          showMessage(`${lootName(entry)} upgraded to level ${entry.level}.`);
+          updateUi();
+        }
+      });
+      ui.shop.appendChild(btn);
+    }
+
+    function upgradeCost(entry) {
+      const level = entry.level || 1;
+      const rarityCost = { starter: 80, common: 110, uncommon: 150, rare: 220, epic: 310, legendary: 430 }[weaponCatalog[entry.id].rarity] || 120;
+      return rarityCost + level * level * 50;
     }
 
     function renderTasks() {
@@ -1501,8 +1658,10 @@
     window.addEventListener("keydown", (event) => {
       keys.add(event.key.toLowerCase());
       if (event.key.toLowerCase() === "e") openNearbyChest();
-      if (event.key.toLowerCase() === "q") shoot(performance.now(), "bottle");
-      if (event.key.toLowerCase() === "f") shoot(performance.now(), "third");
+      if (["1", "2", "3", "4", "5"].includes(event.key)) {
+        player.activeSlot = Number(event.key) - 1;
+        updateUi();
+      }
     });
 
     window.addEventListener("keyup", (event) => keys.delete(event.key.toLowerCase()));
@@ -1522,8 +1681,15 @@
       if (gameState === "intro" || gameState === "over") {
         player.hp = player.maxHp;
         player.coins = Math.max(40, Math.floor(player.coins * .35));
-        player.activeSlot = "primary";
-        player.weaponLevels = { primary: 1, bottle: 1, third: 1 };
+        player.activeSlot = 0;
+        player.hotbar = [
+          { kind: "weapon", id: "sword", level: 1 },
+          { kind: "item", id: "speedPill", uses: 3 },
+          { kind: "item", id: "medPack", uses: 1 },
+          null,
+          null
+        ];
+        player.speedTimer = 0;
         player.deliveries = 0;
         resetLevel(1);
         gameState = "play";
